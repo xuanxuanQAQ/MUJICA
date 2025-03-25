@@ -17,7 +17,7 @@ def gaussian_noise(signal, snr_db=20):
     
     noise_power = signal_power / snr
     
-    noise = np.sqrt(noise_power/2) * (np.random.randn(len(signal)) + 1j*np.random.randn(len(signal)))
+    noise = np.sqrt(noise_power/2) * np.random.randn(len(signal))
     
     return noise
 

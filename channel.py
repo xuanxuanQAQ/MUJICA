@@ -2,6 +2,7 @@ import simulation
 import modulation
 import plot
 import demodulation
+import utils
 import numpy as np
 
 # 参数设置
@@ -16,7 +17,8 @@ m_psk = 4                   # M-PSK的M
 # 模拟相关参数
 sample_rate = 100           # 采样率
 snr_db = 50                 # 噪声信噪比(dB)
-wind_speed = 20             # 风速
+wind_speed = 1              # 风速(m/s)
+fetch_length = 1e6          # 风区长度(m)
 
 # 雷达设置相关参数
 ADCSample = 256             # ADC采样点数，单个chirp的采样数量
@@ -52,7 +54,7 @@ complex_symbols = modulation.mpsk_modulation(crc_bits, m_psk)
 plot.plot_constellation(complex_symbols, 'QPSK 星座图')
 
 # OFDM
-ofdm_signal, frame_structure = modulation.ofdm_modulation(complex_symbols, n_fft, n_cp)
+ofdm_signal, frame_structure = modulation.ofdm_modulation(complex_symbols, n_fft, n_cp, pilot_pattern='comb', comb_num=8)
 real_ofdm_signal = np.real(ofdm_signal)
 
 # 绘制OFDM信号时域和频域波形
@@ -62,15 +64,22 @@ time_indices = modulation.generate_time_indices(real_ofdm_signal, sample_rate, 0
 # 添加高斯白噪声，模拟信道影响
 alpha_dist_noise = simulation.alpha_dist_noise(real_ofdm_signal, 1.5,  0, 1, 0, snr_db)
 gaussain_noise = simulation.gaussian_noise(real_ofdm_signal, snr_db)
-recieved_signal = alpha_dist_noise + gaussain_noise + real_ofdm_signal
+noised_signal = alpha_dist_noise + gaussain_noise + real_ofdm_signal
+
+normalised_signal = utils.signal_normalize(noised_signal)
 
 # 添加有限振幅波
+duration = np.max(time_indices)
+dt = time_indices[1] - time_indices[0]
 w, S = simulation.PM(wind_speed)
-t, eta = simulation.generate_time_series(w, S, duration=20, dt=0.1)
-simulation.plot_spectrum_and_time_series(w, S, t, eta, wind_speed)
+t, eta = simulation.generate_time_series(w, S, duration, dt)
+plot.plot_spectrum_and_time_series(w, S, t, eta, wind_speed)
+
+recieved_signal = normalised_signal + eta
+plot.plot_microamplitude_wave(t, recieved_signal, wind_speed)
 
 # OFDM解调
-demodulated_symbols, channel_estimates = demodulation.ofdm_demodulation(recieved_signal, frame_structure)
+demodulated_symbols, channel_estimates = demodulation.ofdm_demodulation(normalised_signal, frame_structure)
 
 # 绘制解调后的星座图
 plot.plot_constellation(demodulated_symbols, f'解调后的星座图 (SNR={snr_db}dB)')

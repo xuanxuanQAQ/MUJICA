@@ -1,6 +1,6 @@
 import numpy as np
 
-def ofdm_modulation(modulated_symbols, n_fft, n_cp, modulation_type=None, pilot_pattern='edge'):
+def ofdm_modulation(modulated_symbols, n_fft, n_cp, modulation_type=None, pilot_pattern='edge', comb_num=8):
     """
     通用OFDM调制函数，支持不同的调制方式
     
@@ -26,7 +26,7 @@ def ofdm_modulation(modulated_symbols, n_fft, n_cp, modulation_type=None, pilot_
         num_pilots = len(pilot_indices)
     elif pilot_pattern == 'comb':
         # 梳状导频模式: 每隔几个子载波放置一个导频
-        pilot_spacing = 8  # 每8个子载波放一个导频
+        pilot_spacing = comb_num  # 每8个子载波放一个导频
         pilot_indices = [i for i in range(1, n_fft//2, pilot_spacing)]
         pilot_values = np.array([1+0j] * len(pilot_indices))
         num_pilots = len(pilot_indices)

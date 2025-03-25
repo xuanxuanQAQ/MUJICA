@@ -3,7 +3,7 @@ from scipy import interpolate
 
 def ofdm_demodulation(ofdm_signal, frame_structure, equalization='zf'):
     """
-    OFDM解调函数
+    完整的OFDM解调函数，组合了上述三个函数
     
     参数:
     ofdm_signal: 接收到的OFDM时域信号
@@ -14,11 +14,34 @@ def ofdm_demodulation(ofdm_signal, frame_structure, equalization='zf'):
     demodulated_symbols: 解调后的符号序列
     channel_estimates: 信道估计结果
     """
+    # 1. 预处理 - 移除CP并进行FFT
+    ofdm_freq_symbols, symbol_mapping = ofdm_preprocessing(ofdm_signal, frame_structure)
+    
+    # 2. 信道估计
+    n_fft = frame_structure['n_fft']
+    channel_estimates = estimate_channel(ofdm_freq_symbols, symbol_mapping, n_fft)
+    
+    # 3. 均衡和解调
+    demodulated_symbols = apply_equalization(ofdm_freq_symbols, channel_estimates, symbol_mapping, equalization)
+    
+    return demodulated_symbols, channel_estimates
+
+def ofdm_preprocessing(ofdm_signal, frame_structure):
+    """
+    OFDM信号预处理（解调前的处理）
+    
+    参数:
+    ofdm_signal: 接收到的OFDM时域信号
+    frame_structure: OFDM帧结构信息（由ofdm_modulation返回）
+    
+    返回:
+    ofdm_freq_symbols: FFT后的频域OFDM符号
+    symbol_mapping: 子载波映射信息
+    """
     # 从帧结构中提取参数
     num_ofdm_symbols = frame_structure['num_ofdm_symbols']
     n_fft = frame_structure['n_fft']
     n_cp = frame_structure['n_cp']
-    pilot_pattern = frame_structure['pilot_pattern']
     symbol_mapping = frame_structure['symbol_mapping']
     
     # 计算每个OFDM符号的总长度
@@ -34,11 +57,24 @@ def ofdm_demodulation(ofdm_signal, frame_structure, equalization='zf'):
     # 执行FFT获取频域OFDM符号
     ofdm_freq_symbols = np.fft.fft(ofdm_time_symbols, axis=1)
     
+    return ofdm_freq_symbols, symbol_mapping
+
+def estimate_channel(ofdm_freq_symbols, symbol_mapping, n_fft):
+    """
+    OFDM信道估计
+    
+    参数:
+    ofdm_freq_symbols: FFT后的频域OFDM符号
+    symbol_mapping: 子载波映射信息
+    n_fft: FFT点数
+    
+    返回:
+    channel_estimates: 信道估计结果
+    """
+    num_ofdm_symbols = ofdm_freq_symbols.shape[0]
+    
     # 存储信道估计结果
     channel_estimates = np.zeros((num_ofdm_symbols, n_fft), dtype=complex)
-    
-    # 存储解调后的符号
-    demodulated_symbols = []
     
     # 处理每个OFDM符号
     for i in range(num_ofdm_symbols):
@@ -94,6 +130,31 @@ def ofdm_demodulation(ofdm_signal, frame_structure, equalization='zf'):
             h_front = np.mean(h_pilots) * np.ones(n_fft//2 + 1)
             h_back = np.conjugate(np.flip(h_front[1:n_fft//2]))  # 排除DC和Nyquist
             channel_estimates[i] = np.concatenate([h_front, h_back])
+    
+    return channel_estimates
+
+def apply_equalization(ofdm_freq_symbols, channel_estimates, symbol_mapping, equalization='zf'):
+    """
+    应用信道均衡并提取数据符号
+    
+    参数:
+    ofdm_freq_symbols: FFT后的频域OFDM符号
+    channel_estimates: 信道估计结果
+    symbol_mapping: 子载波映射信息
+    equalization: 均衡方法 ('zf': 零强制均衡, 'mmse': 最小均方误差均衡)
+    
+    返回:
+    demodulated_symbols: 解调后的符号序列
+    """
+    num_ofdm_symbols = ofdm_freq_symbols.shape[0]
+    
+    # 存储解调后的符号
+    demodulated_symbols = []
+    
+    # 处理每个OFDM符号
+    for i in range(num_ofdm_symbols):
+        # 获取当前OFDM符号的子载波映射
+        current_mapping = np.array(symbol_mapping[i])
         
         # 应用信道均衡
         if equalization == 'zf':  # 零强制均衡
@@ -117,4 +178,4 @@ def ofdm_demodulation(ofdm_signal, frame_structure, equalization='zf'):
     # 转换为numpy数组
     demodulated_symbols = np.array(demodulated_symbols)
     
-    return demodulated_symbols, channel_estimates
+    return demodulated_symbols

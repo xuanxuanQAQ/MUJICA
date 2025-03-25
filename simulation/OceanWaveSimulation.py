@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+from numpy import pi, exp
 
 # JONSWAP spectrum function
 def JONSWAP(U, X):
@@ -12,7 +12,7 @@ def JONSWAP(U, X):
     w: Frequency array (Hz)
     S: Spectral density (m^2/Hz)
     """
-    w = np.arange(0.01, 1.01, 0.01)  # Frequency range
+    w = np.arange(0.01, 10.01, 0.01)  # Frequency range
     S = np.zeros_like(w)
     gamma = 3.3
     g = 9.81  # gravitational acceleration
@@ -41,7 +41,7 @@ def Bretschneider(U):
     w: Frequency array (Hz)
     S: Spectral density (m^2/Hz)
     """
-    w = np.arange(0.0, 1.01, 0.01)  # Frequency range
+    w = np.arange(0.0, 10.01, 0.01)  # Frequency range
     S = np.zeros_like(w)
     W_m = 9.81 / U
     H = 0.22 * U**2 / 9.81
@@ -64,7 +64,7 @@ def PM(U):
     w: Frequency array (Hz)
     S: Spectral density (m^2/Hz)
     """
-    w = np.arange(0.0, 1.01, 0.01)  # Frequency range
+    w = np.arange(0.0, 10.01, 0.01)  # Frequency range
     S = np.zeros_like(w)
     g = 9.81  # gravitational acceleration
     
@@ -89,10 +89,10 @@ def generate_time_series(w, S, duration=20, dt=0.1, random_seed=42):
     
     返回:
     t: 时间数组 (秒)
-    eta: 波浪高度时间序列 (米)
+    eta: 波浪高度时间序列 (毫米)
     """
     # 创建时间数组
-    t = np.arange(0, duration, dt)
+    t = np.arange(0, duration + dt, dt)
     dw = w[1] - w[0] 
 
     eta = np.zeros_like(t)
@@ -112,54 +112,7 @@ def generate_time_series(w, S, duration=20, dt=0.1, random_seed=42):
         # 将该频率分量添加到总波浪高度
         eta += a * np.cos(2*np.pi * omega * t + phase)
     
+    eta *= 1e3
+    
     return t, eta
 
-
-def plot_spectrum_and_time_series(w, S, t, eta, U, save_path=None):
-    """
-    绘制PM频谱和对应的时域波形
-    
-    参数:
-    w: 频率数组 (Hz)
-    S: 对应的谱密度数组 (m²/Hz)
-    t: 时间数组 (秒)
-    eta: 波浪高度数组 (米)
-    U: 风速 (m/s)，用于标题显示
-    save_path: 保存图像的路径，如果为None则不保存
-    """
-    # 创建两个子图
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-    
-    # 绘制频谱
-    ax1.plot(w, S, 'b-', linewidth=2)
-    ax1.set_xlabel('频率 ω (Hz)', fontsize=14)
-    ax1.set_ylabel('谱密度 S(ω) (m²/Hz)', fontsize=14)
-    ax1.set_title(f'Pierson-Moskowitz 频谱 (风速 = {U} m/s)', fontsize=16)
-    ax1.grid(True)
-    
-    # 绘制时域波形
-    ax2.plot(t, eta, 'r-', linewidth=1.5)
-    ax2.set_xlabel('时间 t (秒)', fontsize=14)
-    ax2.set_ylabel('波浪高度 η(t) (米)', fontsize=14)
-    ax2.set_title(f'生成的时域波浪高度 (风速 = {U} m/s)', fontsize=16)
-    ax2.grid(True)
-    
-    # 计算有效波高 (显著波高)
-    Hs = 4 * np.sqrt(np.trapz(S, w))
-    
-    # 添加文本信息
-    textstr = f'有效波高 (Hs) = {Hs:.2f} m'
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    ax2.text(0.05, 0.95, textstr, transform=ax2.transAxes, fontsize=14,
-             verticalalignment='top', bbox=props)
-    
-    plt.tight_layout()
-    
-    # 保存图像（如果提供了路径）
-    if save_path:
-        plt.savefig(save_path, dpi=300)
-    
-    # 直接显示图像
-    plt.show()
-    
-    return fig

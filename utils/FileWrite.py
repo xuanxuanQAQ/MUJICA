@@ -1,4 +1,4 @@
-from TransFormat import binary_to_string
+from .TransFormat import binary_to_string
 
 
 def data_save(data, file_name):

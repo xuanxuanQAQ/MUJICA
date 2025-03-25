@@ -80,7 +80,7 @@ def plot_spectrum_and_time_series(w, S, t, eta, U, save_path=None):
     w: 频率数组 (Hz)
     S: 对应的谱密度数组 (m²/Hz)
     t: 时间数组 (秒)
-    eta: 波浪高度数组 (米)
+    eta: 波浪高度数组 (毫米)
     U: 风速 (m/s)，用于标题显示
     save_path: 保存图像的路径，如果为None则不保存
     """
@@ -97,7 +97,7 @@ def plot_spectrum_and_time_series(w, S, t, eta, U, save_path=None):
     # 绘制时域波形
     ax2.plot(t, eta, 'r-', linewidth=1.5)
     ax2.set_xlabel('时间 t (秒)', fontsize=14)
-    ax2.set_ylabel('波浪高度 η(t) (米)', fontsize=14)
+    ax2.set_ylabel('波浪高度 η(t) (毫米)', fontsize=14)
     ax2.set_title(f'生成的时域波浪高度 (风速 = {U} m/s)', fontsize=16)
     ax2.grid(True)
     
@@ -117,6 +117,34 @@ def plot_spectrum_and_time_series(w, S, t, eta, U, save_path=None):
         plt.savefig(save_path, dpi=300)
     
     # 直接显示图像
-    plt.show()
+    plt.show(block=False)
     
     return fig
+
+
+def plot_microamplitude_wave(t, recieved_signal, U, save_path=None):
+    """
+    绘制微幅波谱
+    
+    参数:
+    t: 时间数组 (秒)
+    eta: 波浪高度数组 (毫米)
+    U: 风速 (m/s)，用于标题显示
+    save_path: 保存图像的路径，如果为None则不保存
+    """
+
+    plt.figure(figsize=(15, 10))
+
+    # 绘制时域波形
+    plt.plot(t, recieved_signal, 'r-', linewidth=1.5)
+    plt.xlabel('时间 t (秒)', fontsize=14)
+    plt.ylabel('波浪高度 η(t) (毫米)', fontsize=14)
+    plt.title(f'生成的时域波浪高度 (风速 = {U} m/s)', fontsize=16)
+    plt.grid(True)
+    
+    # 保存图像（如果提供了路径）
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+    
+    plt.show(block=False)
+    

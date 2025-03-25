@@ -1,3 +1,4 @@
+import numpy as np
 
 
 def binary_to_string(binary_array):
@@ -11,3 +12,13 @@ def binary_to_string(binary_array):
     str: 二进制字符串表示
     """
     return ''.join(str(bit) for bit in binary_array)
+
+def signal_normalize(recieved_signal):
+    """
+    将信号幅度归一化到微幅波的10um级
+    """
+    max_value = np.max(np.abs(recieved_signal))
+    scale_factor = 0.01 / max_value
+    normalized_signal = recieved_signal * scale_factor
+    
+    return normalized_signal
