@@ -138,18 +138,38 @@ def apply_equalization(ofdm_freq_symbols, channel_estimates, symbol_mapping, equ
     应用信道均衡并提取数据符号
     
     参数:
-    ofdm_freq_symbols: FFT后的频域OFDM符号
-    channel_estimates: 信道估计结果
+    ofdm_freq_symbols: FFT后的频域OFDM符号，可以是复数数组或形状为 [length, 2] 的实部/虚部数组
+    channel_estimates: 信道估计结果，可以是复数数组或形状为 [length, 2] 的实部/虚部数组
     symbol_mapping: 子载波映射信息
     equalization: 均衡方法 ('zf': 零强制均衡, 'mmse': 最小均方误差均衡)
     
     返回:
-    demodulated_symbols: 解调后的符号序列
+    demodulated_symbols: 解调后的符号序列，格式与输入相同
     """
-    num_ofdm_symbols = ofdm_freq_symbols.shape[0]
+    # 检查输入格式
+    is_complex_format = False
+    if len(ofdm_freq_symbols.shape) == 2 and ofdm_freq_symbols.shape[1] == 2:
+        # 输入是 [length, 2] 格式
+        is_complex_format = True
+        # 转换为复数进行处理
+        ofdm_complex = ofdm_freq_symbols[:, 0] + 1j * ofdm_freq_symbols[:, 1]
+        channel_complex = channel_estimates[:, 0] + 1j * channel_estimates[:, 1]
+        
+        n_subcarriers = len(symbol_mapping[0])
+        num_ofdm_symbols = len(symbol_mapping)
+        # 重塑ofdm_complex和channel_complex为[num_symbols, n_subcarriers]格式
+        ofdm_complex = ofdm_freq_symbols[:, 0].reshape(num_ofdm_symbols, n_subcarriers) + \
+                  1j * ofdm_freq_symbols[:, 1].reshape(num_ofdm_symbols, n_subcarriers)
+        channel_complex = channel_estimates[:, 0].reshape(num_ofdm_symbols, n_subcarriers) + \
+                 1j * channel_estimates[:, 1].reshape(num_ofdm_symbols, n_subcarriers)
+    else:
+        # 输入已经是复数
+        ofdm_complex = ofdm_freq_symbols
+        channel_complex = channel_estimates
+        num_ofdm_symbols = ofdm_complex.shape[0]
     
     # 存储解调后的符号
-    demodulated_symbols = []
+    demodulated_symbols_complex = []
     
     # 处理每个OFDM符号
     for i in range(num_ofdm_symbols):
@@ -158,13 +178,13 @@ def apply_equalization(ofdm_freq_symbols, channel_estimates, symbol_mapping, equ
         
         # 应用信道均衡
         if equalization == 'zf':  # 零强制均衡
-            equalized_symbols = ofdm_freq_symbols[i] / channel_estimates[i]
+            equalized_symbols = ofdm_complex[i] / channel_complex[i]
         elif equalization == 'mmse':  # 最小均方误差均衡
             # 假设噪声方差为0.1（实际应用中应该估计）
             noise_var = 0.1
-            equalized_symbols = ofdm_freq_symbols[i] * np.conj(channel_estimates[i]) / (np.abs(channel_estimates[i])**2 + noise_var)
+            equalized_symbols = ofdm_complex[i] * np.conj(channel_complex[i]) / (np.abs(channel_complex[i])**2 + noise_var)
         else:  # 默认使用零强制均衡
-            equalized_symbols = ofdm_freq_symbols[i] / channel_estimates[i]
+            equalized_symbols = ofdm_complex[i] / channel_complex[i]
         
         # 找出数据子载波位置
         data_indices = np.where(current_mapping == 1)[0]
@@ -173,9 +193,21 @@ def apply_equalization(ofdm_freq_symbols, channel_estimates, symbol_mapping, equ
         data_symbols = equalized_symbols[data_indices]
         
         # 添加到解调符号列表
-        demodulated_symbols.extend(data_symbols)
+        demodulated_symbols_complex.extend(data_symbols)
     
     # 转换为numpy数组
-    demodulated_symbols = np.array(demodulated_symbols)
+    demodulated_symbols_complex = np.array(demodulated_symbols_complex)
+    
+    # 根据输入格式决定输出格式
+    if is_complex_format:
+        demodulated_symbols_complex = demodulated_symbols_complex.flatten()
+        
+        # 转换回 [length, 2] 格式
+        demodulated_symbols = np.zeros((len(demodulated_symbols_complex), 2), dtype=np.float32)
+        demodulated_symbols[:, 0] = np.real(demodulated_symbols_complex)
+        demodulated_symbols[:, 1] = np.imag(demodulated_symbols_complex)
+    else:
+        # 保持复数格式
+        demodulated_symbols = demodulated_symbols_complex
     
     return demodulated_symbols

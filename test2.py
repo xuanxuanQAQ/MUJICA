@@ -132,8 +132,7 @@ def load_channel_data(signal_dir='data/Train_mpsk_signal_B00',
                       pilot_dir='data/Train_pilot_B00',
                       batch_size=32, 
                       shuffle=True, 
-                      num_workers=4,
-                      memory_efficient=False):
+                      num_workers=4):
     """
     加载通道数据
     
@@ -143,7 +142,6 @@ def load_channel_data(signal_dir='data/Train_mpsk_signal_B00',
         batch_size: 批大小
         shuffle: 是否打乱数据
         num_workers: 数据加载的工作线程数
-        memory_efficient: 是否使用内存高效的数据加载方式
     
     返回:
         数据加载器
@@ -157,12 +155,8 @@ def load_channel_data(signal_dir='data/Train_mpsk_signal_B00',
     ext = os.path.splitext(signal_files[0])[1]
     pattern = f"*{ext}"
     
-    # 选择数据集类型
-    if memory_efficient:
-        dataset = BatchChannelDataset(signal_dir, pilot_dir, pattern)
-    else:
-        dataset = ChannelDataset(signal_dir, pilot_dir, pattern)
-    
+    dataset = ChannelDataset(signal_dir, pilot_dir, pattern)
+   
     # 创建数据加载器
     data_loader = DataLoader(
         dataset=dataset,
@@ -195,47 +189,26 @@ class ChannelDataset(Dataset):
         self.signals = []
         
         for signal_file, pilot_file in zip(self.signal_files, self.pilot_files):
-            # 对CSV文件使用pandas读取，处理复数数据
+            # 对CSV文件进行处理，读取复数数据
             try:
-                # 读取文件
-                signal_df = pd.read_csv(signal_file)
-                pilot_df = pd.read_csv(pilot_file)
+                # 直接用numpy读取以保持原始行结构
+                signal_data = np.loadtxt(signal_file, delimiter=',')
+                pilot_data = np.loadtxt(pilot_file, delimiter=',')
                 
-                # 识别复数值（例如 "1.2+3.4j" 格式的字符串）
-                def extract_complex(df):
-                    # 创建空的数组来存储结果
-                    rows, cols = df.shape
-                    complex_array = np.zeros((rows, cols), dtype=np.complex64)
-                    
-                    # 逐个处理每个元素
-                    for i in range(rows):
-                        for j in range(cols):
-                            val = df.iloc[i, j]
-                            if isinstance(val, str):
-                                try:
-                                    # 尝试将字符串作为复数解析
-                                    complex_array[i, j] = complex(val.replace('i', 'j'))
-                                except ValueError:
-                                    # 如果失败，尝试作为纯实数解析
-                                    try:
-                                        complex_array[i, j] = float(val)
-                                    except ValueError:
-                                        complex_array[i, j] = 0
-                            else:
-                                # 如果已经是数值，直接使用
-                                complex_array[i, j] = complex(val) if val == val else 0  # 处理NaN
-                    
-                    return complex_array
+                # 检查行数是否为偶数(每两行表示一个复数数据)
+                if signal_data.shape[0] % 2 != 0 or pilot_data.shape[0] % 2 != 0:
+                    print(f"警告: 文件行数不是偶数 - {signal_file}: {signal_data.shape[0]}, {pilot_file}: {pilot_data.shape[0]}")
                 
-                # 提取复数数组
-                signal_complex = extract_complex(signal_df)
-                pilot_complex = extract_complex(pilot_df)
+                # 重构复数数据
+                # 第一行是实部，第二行是虚部
+                signal_complex = signal_data[0] + 1j * signal_data[1]
+                pilot_complex = pilot_data[0] + 1j * pilot_data[1]
                 
                 # 打印复数数组的形状
                 print(f"复数数组形状 - 信号: {signal_complex.shape}, 导频: {pilot_complex.shape}")
                 
                 # 将复数数组转换为双通道实数数组 (实部和虚部分开)
-                # shape将从 [rows, cols] 变为 [rows, cols, 2]
+                # shape将从 [cols] 变为 [cols, 2]
                 signal_float = np.stack([signal_complex.real, signal_complex.imag], axis=-1).astype(np.float32)
                 pilot_float = np.stack([pilot_complex.real, pilot_complex.imag], axis=-1).astype(np.float32)
                 
@@ -272,7 +245,7 @@ class ChannelDataset(Dataset):
 # 使用示例
 if __name__ == "__main__":
     # 创建模型
-    # generator = Generator()
+    generator = Generator()
     # discriminator = Discriminator()
     
     train_loader = load_channel_data(
