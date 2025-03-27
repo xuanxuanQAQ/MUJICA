@@ -5,6 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import torch
 import torch.nn as nn
 import math
+import numpy as np
 import demodulation
 
 class PositionalEncoding(nn.Module):
@@ -159,7 +160,7 @@ def process_frame_structure(frame_structure):
     return symbol_mapping, map_idx, total_len
 
 
-def train_model(model, train_loader, num_epochs, learning_rate=0.001):
+def train_model(model, train_loader, num_epochs, learning_rate=0.001, save_dir='model'):
     """
     训练Transformer模型
     
@@ -169,6 +170,10 @@ def train_model(model, train_loader, num_epochs, learning_rate=0.001):
         num_epochs: 训练轮数
         learning_rate: 学习率
     """
+    # 创建保存目录
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)    
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -185,19 +190,23 @@ def train_model(model, train_loader, num_epochs, learning_rate=0.001):
     else:
         batch_size = 0
         
+    best_loss = float('inf')    
+        
     model.train()
     for epoch in range(num_epochs):
         total_loss = 0
-        for batch_idx, (src, target) in enumerate(train_loader):
+        for batch_idx, (src, src2, target) in enumerate(train_loader):
                
-            src, target = src.to(device), target.to(device)
+            src, src2, target = src.to(device), src2.to(device), target.to(device)
             
             optimizer.zero_grad()
             channel = model(src, map_idx, total_len)
             
-            # 需要把target[idx]改成收到的symbol
+            output = []
             for idx in range(batch_size):
-                output = demodulation.apply_equalization(target[idx], channel[idx], symbol_mapping)
+                demodulated_signal = demodulation.apply_equalization(src2[idx], channel[idx], symbol_mapping)
+                output.append(demodulated_signal)
+            output = torch.stack(output)  # Convert list of tensors to a single tensor
             
             loss = criterion(output, target)
             loss.backward()
@@ -211,29 +220,73 @@ def train_model(model, train_loader, num_epochs, learning_rate=0.001):
         avg_loss = total_loss / len(train_loader)
         print(f'Epoch [{epoch+1}/{num_epochs}], Average Loss: {avg_loss:.4f}')
         
+        # 保存每个epoch的模型
+        if (epoch + 1) % 5 == 0:
+            checkpoint_path = os.path.join(save_dir, f'model_epoch_{epoch+1}.pth')
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': avg_loss,
+            }, checkpoint_path)
+            print(f'Model saved to {checkpoint_path}')
         
-def predict(model, input_data, known_positions, target_len):
+        # 保存最佳模型
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            best_model_path = os.path.join(save_dir, 'best_model.pth')
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': best_loss,
+            }, best_model_path)
+            print(f'Best model saved to {best_model_path}')
+            
+    print('Training complete!')
+        
+        
+def predict(model, input_data, symbol_mapping, target_len, model_path=None):
     """
     使用训练好的模型进行预测
     
     参数:
-        model: 训练好的Transformer模型
-        input_data: 输入数据 [batch_size, num_known_points, input_dim]
+        model: Transformer模型实例
+        input_data: 输入数据
         known_positions: 已知点的位置索引
         target_len: 目标序列长度
+        model_path: 模型权重文件路径，如果提供则加载这个权重
     返回:
         预测的完整序列
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
-    input_data = input_data.to(device)
+    
+    symbol_mapping_array = np.array(symbol_mapping)
+    pilot_indices = np.where(symbol_mapping_array == 2)
+    pilot_mapping = np.where(symbol_mapping_array.flatten() == 2)[0]
+    desired_shape = symbol_mapping_array.shape
+    recieved_signal_complex_shaped = input_data.reshape(desired_shape)
+    # 使用导频索引从重塑后的信号中提取导频位置的数据
+    pilot_signals = recieved_signal_complex_shaped[pilot_indices]
+    # 转换为浮点tensor格式，分离实部和虚部
+    pilot_float = np.stack([pilot_signals.real, pilot_signals.imag], axis=-1).astype(np.float32)
+    
+    # 如果提供了模型路径，加载模型权重
+    if model_path:
+        checkpoint = torch.load(model_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print(f"Model loaded from {model_path}")
+    
+    pilot_float = torch.tensor(pilot_float, dtype=torch.float32, device=device)
+    pilot_float = pilot_float.unsqueeze(0)  # Add batch dimension
     
     model.eval()
     with torch.no_grad():
-        predictions = model(input_data, known_positions, target_len)
+        predictions = model(pilot_float, pilot_mapping, target_len)
     
     return predictions.cpu()
-
+ 
 
 if __name__ == '__main__':
     # 测试模型

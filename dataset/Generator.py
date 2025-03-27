@@ -92,15 +92,9 @@ def generate_batch_data(num_bits=2048, poly='CRC-16', m_psk=4, n_fft=64, comb_nu
         sample_inputs['recieved_signal'] = recieved_signal
     
     # OFDM解调
-    ofdm_freq_symbols, symbol_mapping = demodulation.ofdm_preprocessing(ofdm_signal, frame_structure)
+    ofdm_freq_symbols, symbol_mapping = demodulation.ofdm_preprocessing(noised_signal, frame_structure)
     if input == 'ofdm_freq_symbols' or (isinstance(input, list) and 'ofdm_freq_symbols' in input):
-        sample_inputs['ofdm_freq_symbols'] = ofdm_freq_symbols
-    
-    symbol_mapping_array = np.array(symbol_mapping)
-    pilot_indices = np.where(symbol_mapping_array == 2)
-    pilot_symbols = ofdm_freq_symbols[pilot_indices]
-    if input == 'pilot' or (isinstance(input, list) and 'pilot' in input):
-        sample_inputs['pilot'] = pilot_symbols
+        sample_inputs['ofdm_freq_symbols'] = ofdm_freq_symbols.flatten()
         
     n_fft = frame_structure['n_fft']
     channel_estimates = demodulation.estimate_channel(ofdm_freq_symbols, symbol_mapping, n_fft)

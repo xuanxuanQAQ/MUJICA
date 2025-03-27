@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import interpolate
+import torch
 
 def ofdm_demodulation(ofdm_signal, frame_structure, equalization='zf'):
     """
@@ -138,7 +139,7 @@ def apply_equalization(ofdm_freq_symbols, channel_estimates, symbol_mapping, equ
     应用信道均衡并提取数据符号
     
     参数:
-    ofdm_freq_symbols: FFT后的频域OFDM符号，可以是复数数组或形状为 [length, 2] 的实部/虚部数组
+    ofdm_freq_symbols: FFT后的频域OFDM符号，可以是复数数组或形状为 [length, 2] 的实部/虚部数组（torch输入）
     channel_estimates: 信道估计结果，可以是复数数组或形状为 [length, 2] 的实部/虚部数组
     symbol_mapping: 子载波映射信息
     equalization: 均衡方法 ('zf': 零强制均衡, 'mmse': 最小均方误差均衡)
@@ -195,19 +196,21 @@ def apply_equalization(ofdm_freq_symbols, channel_estimates, symbol_mapping, equ
         # 添加到解调符号列表
         demodulated_symbols_complex.extend(data_symbols)
     
-    # 转换为numpy数组
-    demodulated_symbols_complex = np.array(demodulated_symbols_complex)
-    
     # 根据输入格式决定输出格式
     if is_complex_format:
+        demodulated_symbols_complex = torch.stack(demodulated_symbols_complex)
         demodulated_symbols_complex = demodulated_symbols_complex.flatten()
         
         # 转换回 [length, 2] 格式
         demodulated_symbols = np.zeros((len(demodulated_symbols_complex), 2), dtype=np.float32)
-        demodulated_symbols[:, 0] = np.real(demodulated_symbols_complex)
-        demodulated_symbols[:, 1] = np.imag(demodulated_symbols_complex)
+        demodulated_symbols = torch.zeros((demodulated_symbols_complex.size(0), 2), 
+                                          dtype=torch.float32, 
+                                          device='cuda')
+        demodulated_symbols[:, 0] = torch.real(demodulated_symbols_complex)
+        demodulated_symbols[:, 1] = torch.imag(demodulated_symbols_complex)
     else:
         # 保持复数格式
+        demodulated_symbols_complex = np.array(demodulated_symbols_complex)
         demodulated_symbols = demodulated_symbols_complex
     
     return demodulated_symbols
