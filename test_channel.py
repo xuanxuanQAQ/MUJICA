@@ -7,7 +7,7 @@ import numpy as np
 
 # 参数设置
 # 数据相关参数
-num_bits = 1024             # 数据比特数
+num_bits = 2048             # 数据比特数
 n_fft = 64                  # FFT大小
 n_cp = 16                   # 循环前缀长度
 num_data_carriers = 52      # 数据载波数量

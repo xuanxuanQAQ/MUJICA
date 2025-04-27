@@ -160,7 +160,7 @@ def process_frame_structure(frame_structure):
     return symbol_mapping, map_idx, total_len
 
 
-def train_model(model, train_loader, num_epochs, learning_rate=0.001, save_dir='model'):
+def train_channel_estimation(model, train_loader, num_epochs, learning_rate=0.001, save_dir='model'):
     """
     训练Transformer模型
     
@@ -246,7 +246,7 @@ def train_model(model, train_loader, num_epochs, learning_rate=0.001, save_dir='
     print('Training complete!')
         
         
-def predict(model, input_data, symbol_mapping, target_len, model_path=None):
+def predict_channel_estimation(model, input_data, symbol_mapping, target_len, model_path=None):
     """
     使用训练好的模型进行预测
     
@@ -276,7 +276,6 @@ def predict(model, input_data, symbol_mapping, target_len, model_path=None):
     if model_path:
         checkpoint = torch.load(model_path, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
-        print(f"Model loaded from {model_path}")
     
     pilot_float = torch.tensor(pilot_float, dtype=torch.float32, device=device)
     pilot_float = pilot_float.unsqueeze(0)  # Add batch dimension

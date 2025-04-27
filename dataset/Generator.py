@@ -61,19 +61,21 @@ def generate_batch_data(num_bits=2048, poly='CRC-16', m_psk=4, n_fft=64, comb_nu
         sample_labels['mpsk_signal'] = complex_symbols
     
     # ofdm编码
-    ofdm_signal, frame_structure = modulation.ofdm_modulation(complex_symbols, n_fft, n_cp, pilot_pattern='comb', comb_num=8)
+    ofdm_signal, frame_structure = modulation.ofdm_modulation(complex_symbols, n_fft, n_cp, pilot_pattern='comb', comb_num=comb_num)
     real_ofdm_signal = np.real(ofdm_signal)
     time_indices = modulation.generate_time_indices(real_ofdm_signal, sample_rate, 0)
+    if label == 'ofdm_signal' or (isinstance(label, list) and 'ofdm_signal' in label):
+        sample_labels['ofdm_signal'] = real_ofdm_signal
     
     # 信道模拟
     alpha_dist_noise = simulation.alpha_dist_noise(real_ofdm_signal, 1.5, 0, 1, 0, snr_db)
     gaussain_noise = simulation.gaussian_noise(real_ofdm_signal, snr_db)
     noised_signal = alpha_dist_noise + gaussain_noise + real_ofdm_signal
     
-    # 微幅波传导后时域谱（input1-normalized_signal）
-    normalised_signal = utils.signal_normalize(noised_signal)
-    if input == 'normalized_signal' or (isinstance(input, list) and 'normalized_signal' in input):
-        sample_inputs['normalized_signal'] = normalised_signal
+    # 微幅波传导后时域谱（input1-normalised_noised_signal
+    normalised_noised_signal = utils.signal_normalize(noised_signal)
+    if input == 'normalised_noised_signal' or (isinstance(input, list) and 'normalised_noised_signal' in input):
+        sample_inputs['normalised_noised_signal'] = normalised_noised_signal
     
     # 添加有限振幅波
     duration = np.max(time_indices)
@@ -82,12 +84,12 @@ def generate_batch_data(num_bits=2048, poly='CRC-16', m_psk=4, n_fft=64, comb_nu
     t, eta = simulation.generate_time_series(w, S, duration, dt)
     
     # 确保eta和normalized_signal长度匹配
-    min_length = min(len(eta), len(normalised_signal))
+    min_length = min(len(eta), len(normalised_noised_signal))
     eta = eta[:min_length]
-    normalised_signal = normalised_signal[:min_length]
+    normalised_noised_signal = normalised_noised_signal[:min_length]
     
     # 增加有限振幅波后时域谱（input2-recieved_signal）    
-    recieved_signal = normalised_signal + eta
+    recieved_signal = normalised_noised_signal + eta
     if input == 'recieved_signal' or (isinstance(input, list) and 'recieved_signal' in input):
         sample_inputs['recieved_signal'] = recieved_signal
     

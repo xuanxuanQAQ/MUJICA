@@ -1,3 +1,4 @@
-from .DataGenerator import generate_random_binary
+from .DataGenerator import *
 from .ChannelSimulation import *
 from .OceanWaveSimulation import *
+from .UnderWaterSimulation import micro_wave

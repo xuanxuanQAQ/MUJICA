@@ -1,5 +1,5 @@
 import numpy as np
-
+from scipy.signal import find_peaks
 
 def mpsk_demodulation(complex_symbols, M):
     """
@@ -107,3 +107,168 @@ def qam_demodulation(complex_symbols, M):
             bits[i * bits_per_symbol + j] = int(bit)
     
     return bits, decimal_values
+
+def bpsk_demodulator_with_symbol_sync(fs, f, M, mSig):
+    """
+    BPSK解调器函数，从BPSK调制的正弦载波中解调数据。
+    
+    参数:
+    fs : float
+        采样频率 (Hz)
+    f : float
+        载波频率 (Hz)
+    M : float
+        调制指数 M = fc/Rb （每两个周期调制一个比特）
+    mSig : np.ndarray
+        BPSK调制载波的离散波形数据数组
+        
+    返回:
+    nco_i : np.ndarray
+        同相分量波形数据数组
+    dmData : np.ndarray
+        解调的二进制数据数组
+    lpf1 : np.ndarray
+        低通滤波器输出
+    phase : np.ndarray
+        相位数组
+    """
+    # ==
+    # 解调参数
+    # ==
+    ncoFrequency = f
+    ncoInitPhase = -np.pi / 2  # pi / 3
+    ncoStep = 5E-5
+    lpfDepth = 20
+    
+    # ==
+    # 数据归一化
+    # ==
+    N = len(mSig)
+    T = 1 / f  # 载波周期：1 / 载波频率
+    Ts = 1 / fs  # 采样周期：1 / 采样频率
+    t = np.arange(0, N) / fs
+    
+    # ==
+    # Costas环路载波恢复和解调
+    # ==
+    # 初始化处理数组
+    carrier = np.zeros(N)
+    nco_i = np.zeros(N)
+    nco_q = np.zeros(N)
+    mix1 = np.zeros(N)
+    mix2 = np.zeros(N)
+    mix3 = np.zeros(N)
+    lpf1 = np.zeros(N)
+    lpf2 = np.zeros(N)
+    phase = np.zeros(N)
+    phase[0] = ncoInitPhase
+    
+    # 处理数据
+    for i in range(N):
+        # NCO相位反馈
+        if i > 0:
+            # 根据反馈调整NCO频率
+            phase[i] = phase[i - 1] - (ncoStep * np.pi * np.sign(mix3[i - 1]))
+        
+        # NCO
+        nco_i[i] = np.cos(2 * np.pi * ncoFrequency * t[i] + phase[i])
+        nco_q[i] = np.sin(2 * np.pi * ncoFrequency * t[i] + phase[i])
+        
+        # 输入混频器
+        mix1[i] = mSig[i] * nco_i[i]
+        mix2[i] = mSig[i] * nco_q[i]
+        
+        # 低通滤波器
+        if i < lpfDepth:
+            lpf1[i] = np.sum(mix1[:i+1])
+            lpf2[i] = np.sum(mix2[:i+1])
+        else:
+            lpf1[i] = np.sum(mix1[i-lpfDepth+1:i+1])
+            lpf2[i] = np.sum(mix2[i-lpfDepth+1:i+1])
+        
+        # 反馈混频器
+        mix3[i] = lpf1[i] * lpf2[i]
+    
+    # ==
+    # 比特解码
+    # ==
+    saPerCycl = T / Ts  # 每周期样本数
+    saPerSym = saPerCycl * M  # 每符号样本数
+    BN = int(np.floor(N / saPerSym))  # 比特数量
+    dmData = np.zeros(BN)
+    
+    # ==
+    # 码同步
+    # ==
+    aa = np.abs(np.diff(lpf1))
+    # 在Python中使用scipy.signal的findpeaks函数替代MATLAB的findpeaks
+    peakLoc1, _ = find_peaks(aa, prominence=np.sqrt(np.mean(aa**2)))  # MinPeakProminence改为prominence参数
+    
+    ra = np.mod(peakLoc1, saPerSym)
+    # 使用np.bincount找出最常见的值（替代MATLAB的mode函数）
+    counts = np.bincount(ra.astype(int))
+    raloc = np.argmax(counts)
+    
+    for i in range(BN):
+        tt = int(i * saPerSym - 0.4 * saPerSym + raloc)
+        
+        if i == BN - 1:  # Python索引从0开始，所以这里是BN-1
+            end_idx = min(tt + int(0.4 * saPerSym - raloc), N)
+            PG1 = np.mean(lpf1[tt:end_idx])
+        else:
+            end_idx = min(tt + int(0.5 * saPerSym), N)
+            PG1 = np.mean(lpf1[tt:end_idx])
+        
+        if PG1 >= 0:
+            dmData[i] = 1
+        else:
+            dmData[i] = 0
+    
+    return nco_i, dmData, lpf1, phase, raloc
+
+
+def Error110Func(rxData):
+    """
+    Calculate error rate based on comparison with known pattern.
+    先计算相关性对齐再计算误码率。
+    
+    Parameters:
+    rxData : np.ndarray
+        Received data bits
+        
+    Returns:
+    float
+        Error rate
+    """
+    
+    # 定义期望的模式
+    pattern = np.array([1, 1, 0])
+    
+    # 创建完整的参考序列
+    expected_pattern_full = np.tile(pattern, len(rxData)//3 + 1)[:len(rxData)]
+    
+    # 计算不同偏移量下的相关性
+    max_offset = len(pattern)
+    best_correlation = -1
+    best_offset = 0
+    
+    for offset in range(max_offset):
+        # 创建当前偏移下的参考序列
+        shifted_pattern = np.roll(expected_pattern_full, offset)
+        
+        # 计算相关性 (匹配的位数)
+        correlation = np.sum(rxData == shifted_pattern)
+        
+        # 更新最佳偏移
+        if correlation > best_correlation:
+            best_correlation = correlation
+            best_offset = offset
+    
+    # 使用最佳偏移量创建对齐后的参考序列
+    aligned_pattern = np.roll(expected_pattern_full, best_offset)
+    
+    # 计算误码率
+    errors = np.sum(rxData != aligned_pattern)
+    error_rate = errors / len(rxData)
+    
+    return aligned_pattern, error_rate

@@ -28,8 +28,11 @@ num_adc_bits  = 16          # 每个样本的ADC位数
 num_lanes = 4               # 通道数量
 
 
-fileName = 'data/chirpP60F1_Sbig2_Raw_0.bin'
-adc_data = radar.read_dca1000(fileName, num_adc_bits, num_lanes)
+addr = 'data/exp'
+raw_file_name = 'BFPSKRb100A110Fc200P20F2_S1_Raw_0.bin'
+file_path = os.path.join(addr, raw_file_name)
+
+adc_data = radar.read_dca1000(file_path, num_adc_bits, num_lanes)
 
 
 for ChannlNum in [1]:   # 接收通道选择,1-4
@@ -40,19 +43,15 @@ for ChannlNum in [1]:   # 接收通道选择,1-4
     # range FFT
     proData = np.reshape(Data_all[:, :, FrameNum-1], (ADCSample, ChirpNum*len(FrameNum)), order='F')
     DataRangeFft, range_axis = radar.range_fft(proData, ADCSample, BandWidth)
-    plot.plot_range_fft(DataRangeFft, range_axis, os.path.splitext(fileName)[0])
+    plot.plot_range_fft(DataRangeFft, range_axis, os.path.splitext(file_path)[0])
     plot.plot_range_profile(DataRangeFft, range_axis)
-
-    # doppler fft
-    # doppler_maps, doppler_axis = radar.doppler_fft(DataRangeFft, ChirpNum, ChirpPeriod, fc)
-    # plot.animate_range_doppler_maps(doppler_maps, range_axis, doppler_axis)
 
     # 精细相位分析，有BUG
     processed_phase, unwrapped_phase, smooth_phase, sub_phase = radar.process_micromotion_phase(DataRangeFft)
-    # plot.plot_micromotion_phase(unwrapped_phase, smooth_phase, sub_phase, processed_phase, ChirpPeriod, FrameNum)
+    plot.plot_micromotion_phase(unwrapped_phase, smooth_phase, sub_phase, processed_phase, ChirpPeriod, FrameNum)
     
     # STFT分析 ，有BUG
-    f, t, Zxx = radar.phase_stft(processed_phase, fs)
+    # f, t, Zxx = radar.phase_stft(processed_phase, fs)
     # plot.plot_stft(f, t, Zxx)
 
     
