@@ -1,10 +1,13 @@
 import deeplearning as dl
+import radar
+import demodulation
+import utils
 
 # import multiprocessing
 # multiprocessing.freeze_support()
 
-config = 'train'
-method = 'GRU' # 'conv' or 'transformer' or 'GRU'
+config = 'predict' # 'train' or 'predict'
+method = 'conv' # 'conv' or 'transformer' or 'GRU'
 
 save_dir = "model/fusion_denoising"
 channel_est_pt = 'model/fusion_denoising/best_model.pth'
@@ -48,7 +51,7 @@ if config == "train":
                 batch_size=4
             )
 
-        dl.train_fusion_denoising(model, data, epochs=600, learning_rate=0.002, save_dir=save_dir)
+        dl.train_fusion_denoising(model, data, epochs=300, learning_rate=0.002, save_dir=save_dir)
         
     elif method == 'transformer':      
         # Load the data
@@ -58,7 +61,7 @@ if config == "train":
                 batch_size=1
             )
 
-        dl.train_fusion_denoising_transformer(model, data, epochs=1000, learning_rate=0.002, save_dir=save_dir)
+        dl.train_fusion_denoising_transformer(model, data, epochs=200, learning_rate=0.002, save_dir=save_dir)
         
     elif method == 'GRU':
         # Load the data
@@ -68,8 +71,29 @@ if config == "train":
                 batch_size=4
             )
 
-        dl.train_fusion_denoising_bigru(model, data, epochs=1000, learning_rate=0.002, save_dir=save_dir)
+        dl.train_fusion_denoising_bigru(model, data, epochs=200, learning_rate=0.002, save_dir=save_dir)
     
 elif config =="predict":
     
-    input()
+    file_name = 'BPSKRb100A110Fc200P70F1_S3_Raw_0.bin'
+    processed_phase, fs, fc, modulationIndex = radar.extract_processed_radar_phase(file_name)
+    
+    rxDatas = []
+    for i in range(4):
+        _, rxData, _, _, raloc = demodulation.bpsk_demodulator_with_symbol_sync(fs, fc, modulationIndex, processed_phase[i])
+        rxDatas.append(rxData)
+    
+    decoded_signal = utils.majority_vote_decoder(rxDatas)
+    _, error = demodulation.Error110Func(decoded_signal)
+    print(f"File: {file_name}, Standard Error Rate: {error}")
+    
+    if method == 'conv':
+        
+        denoised_phase = dl.predict_fusion_denoising(model, processed_phase, 'model/fusion_denoising/best_model.pth')
+        
+        _, rxData_dl, _, _, raloc = demodulation.bpsk_demodulator_with_symbol_sync(fs, fc, modulationIndex, denoised_phase)
+        _, error_dl = demodulation.Error110Func(rxData_dl)
+        print(f"File: {file_name}, DL Error Rate: {error_dl}")
+        
+
+

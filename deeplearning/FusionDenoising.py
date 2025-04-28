@@ -16,29 +16,38 @@ class TimeFrequencyFilterNet(nn.Module):
         
         # 时域处理分支 - 修改为支持多通道输入
         self.time_encoder = nn.Sequential(
-            nn.Conv1d(in_channels, hidden_dim, kernel_size=7, padding=3),
+            nn.Conv1d(in_channels, hidden_dim, kernel_size=9, padding=4, dilation=1),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=7, padding=3),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=9, padding=8, dilation=2),
+            nn.BatchNorm1d(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=9, padding=16, dilation=4),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True)
         )
         
         # 频域处理分支 - 对实部和虚部分别处理
         self.freq_encoder_real = nn.Sequential(
-            nn.Conv2d(in_channels, hidden_dim, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels, hidden_dim, kernel_size=5, padding=2, dilation=1),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=5, padding=4, dilation=2),
+            nn.BatchNorm2d(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=5, padding=8, dilation=4),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(inplace=True)
         )
         
         self.freq_encoder_imag = nn.Sequential(
-            nn.Conv2d(in_channels, hidden_dim, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels, hidden_dim, kernel_size=5, padding=2, dilation=1),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=5, padding=4, dilation=2),
+            nn.BatchNorm2d(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=5, padding=8, dilation=4),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(inplace=True)
         )
@@ -48,14 +57,13 @@ class TimeFrequencyFilterNet(nn.Module):
         
         # FiLM调制参数生成器 - 从时域特征生成频域特征的调制参数
         self.film_generator = nn.Sequential(
-            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=5, padding=2),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=7, padding=3),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=1),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=7, padding=6, dilation=2),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True),
-            # 最后一层不需要非线性激活，直接输出调制参数
-            nn.AdaptiveAvgPool1d(freq_height) # 自适应池化到频率维度大小
+            nn.AdaptiveAvgPool1d(freq_height)
         )
         
         # 分别生成频域实部和虚部的调制系数和偏置
@@ -186,7 +194,7 @@ class TimeFrequencyFilterNet(nn.Module):
             output_time_from_freq = F.pad(output_time_from_freq, (0, output_time_direct.shape[2] - output_time_from_freq.shape[2]))
         
         # 最终输出 - 将直接时域和反变换时域组合（保持单通道输出）
-        alpha = 0.7  # 融合参数，可学习
+        alpha = 0  # 融合参数，可学习
         output = alpha * output_time_direct + (1 - alpha) * output_time_from_freq
         
         return output
@@ -302,3 +310,48 @@ def train_fusion_denoising(model, train_loader, epochs=50, learning_rate=0.001, 
     
     # 返回最终训练好的模型
     return model
+
+def predict_fusion_denoising(model, input_data, model_path=None):
+    """
+    对单个样本进行预测，不使用数据加载器
+    
+    Args:
+        model: 模型结构（未加载权重）
+        input_data: 输入数据，形状为 [C, T] 或 [B, C, T]
+        model_path (str): 模型权重路径，默认为None则使用模型当前权重
+    
+    Returns:
+        torch.Tensor: 预测结果
+    """
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    
+    # 如果提供了模型路径，加载模型权重
+    if model_path is not None:
+        checkpoint = torch.load(model_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print(f'Model loaded from {model_path}')
+    
+    # 评估模式
+    model.eval()
+    
+    # 确保输入数据是张量并添加批次维度（如果需要）
+    if not isinstance(input_data, torch.Tensor):
+        input_data = torch.tensor(input_data, dtype=torch.float32)
+    
+    # 检查数据维度并添加批次维度（如果需要）
+    if len(input_data.shape) == 2:  # [C, T] 形状
+        input_data = input_data.unsqueeze(0)  # 添加批次维度 [1, C, T]
+    
+    # 将数据移至设备
+    input_data = input_data.to(device)
+    
+    # 不计算梯度
+    with torch.no_grad():
+        # 前向传播
+        output = model(input_data)
+    output = output.cpu().numpy()  # 转回CPU并转换为NumPy数组
+    output = output.squeeze(0)  # 去掉批次维度
+    output = output.squeeze(0)  # 去掉通道维度
+    
+    return output

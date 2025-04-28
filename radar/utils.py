@@ -4,6 +4,10 @@ import scipy.signal as signal
 from scipy.signal import stft
 from scipy.interpolate import interp1d
 from scipy.ndimage import uniform_filter1d
+import os
+from .Analyze import range_fft
+from .ReadData import read_dca1000, radar_params_extract
+import glob
 
 def find_max_energy_range_bin(data_range_fft, channel_num=0):
    """
@@ -213,3 +217,46 @@ def extract_phase_from_max_range_bin(data_range_fft, max_range_idx, range_search
    
    return phase_range
 
+def extract_processed_radar_phase(file_name):
+        fc = 200
+        FrameNum = list(range(1, 257)) 
+        lamda = 3e8 / 77e9
+        ChannlNum = 0
+        Rb = 100
+        fc = 200
+        modulationIndex = fc / Rb  # Modulate at one bit per two cycles
+
+        # Load rawData3D
+        folder = 'data/exp'  # 指定包含.bin文件的文件夹路径
+
+        file_path = os.path.join(folder, file_name)
+
+        file_name = os.path.basename(file_path)
+        rawData = read_dca1000(file_path)
+
+        params = radar_params_extract(file_path)
+        ADCSample, ChirpPeriod, ADCFs, ChirpNum, FramPeriod, FramNum, slope, BandWidth, R_Maximum, R_resulo, V_Maximum, V_resulo = params
+        fs = 1e6 / ChirpPeriod
+
+        Len = rawData.shape[1]
+        fullChirp = FramPeriod / ChirpPeriod
+
+        times, times_compen = create_time_arrays(ChirpPeriod, FrameNum, fullChirp)
+
+        processed_phases = []
+        for ChannlNum in range(4):
+            frames_dimension = int(round(Len/(ADCSample*ChirpNum)))
+            Data_all = np.reshape(rawData, (4, int(ADCSample), int(ChirpNum), frames_dimension), order='F')
+            proData = np.reshape(Data_all[:, :, :, np.array(FrameNum)-1], (4, int(ADCSample), -1), order='F')
+
+            DataRangeFft, _ = range_fft(proData, int(ADCSample), BandWidth, apply_window=False)
+            _, maxlocAll = find_max_energy_range_bin(DataRangeFft[ChannlNum, :, :])
+            phase_range = extract_phase_from_max_range_bin(DataRangeFft, maxlocAll, range_search=3, channel_num=ChannlNum, time_increment=1)
+
+            # Process max power range bin 
+            unwrapped_phase, _ = extract_and_unwrap_phase(phase_range)
+            processed_phase, _, _ = process_micro_phase(unwrapped_phase, times, times_compen, window_size=57, poly_order=3, threshold=0.02)
+            
+            processed_phases.append(processed_phase)
+        
+        return processed_phases, fs, fc, modulationIndex
