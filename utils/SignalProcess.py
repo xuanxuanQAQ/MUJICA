@@ -1,5 +1,5 @@
 import numpy as np
-
+from scipy.interpolate import interp1d
 
 def sliding_window(signal, window_size, overlap_percent=50):
     """
@@ -115,3 +115,38 @@ def channels_to_complex(channel_signal):
     
     else:
         raise ValueError("仅支持(n_samples, 2)或(n_samples, n_features, 2)形状的输入")
+    
+    
+def interpolate_1d_timeseries(time_series, input_fs, output_fs, method='linear'):
+    """
+    根据输入和输出采样率对1D时间序列进行插值
+    
+    参数:
+    time_series (numpy.ndarray): 1D时间序列数据
+    input_fs (float): 输入信号采样率 (Hz)
+    output_fs (float): 输出信号采样率 (Hz)
+    method (str): 插值方法，可选 'linear', 'cubic', 'nearest' 等
+    
+    返回:
+    tuple: (interpolated_series, target_times)
+        - interpolated_series (numpy.ndarray): 插值后的时间序列
+        - target_times (numpy.ndarray): 目标时间索引
+    """
+    # 计算原始时间索引
+    n_samples = len(time_series)
+    original_duration = (n_samples - 1) / input_fs
+    original_times = np.linspace(0, original_duration, n_samples)
+    
+    # 计算目标时间索引
+    target_n_samples = int(original_duration * output_fs) + 1
+    target_times = np.linspace(0, original_duration, target_n_samples)
+    
+    # 执行插值
+    if method == 'linear':
+        interpolated_series = np.interp(target_times, original_times, time_series)
+    else:
+        interpolator = interp1d(original_times, time_series, kind=method, 
+                               bounds_error=False, fill_value='extrapolate')
+        interpolated_series = interpolator(target_times)
+    
+    return interpolated_series, target_times

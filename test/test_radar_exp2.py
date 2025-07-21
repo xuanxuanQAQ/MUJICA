@@ -1,9 +1,11 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 import glob
 from scipy.fft import fft
-import sys
 import radar
 import scipy.signal as signal
 from scipy.signal import savgol_filter

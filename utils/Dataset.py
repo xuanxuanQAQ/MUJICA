@@ -56,3 +56,68 @@ def majority_vote_decoder(rxDatas):
             decoded_signal[i] = 0
     
     return decoded_signal
+
+def load_data_from_csv(file_path, columns=None):
+    """
+    从CSV文件加载数据，支持选择特定列
+    
+    参数:
+    file_path : str
+        CSV文件的路径
+    columns : str or list of str, optional
+        要加载的列名。如果为None，则加载所有数值列
+        
+    返回值:
+    numpy.ndarray
+        加载的数据，形状为 [通道数, 时间步数]
+    """
+    try:
+        import pandas as pd
+        
+        # 使用pandas读取CSV文件，保留列名
+        df = pd.read_csv(file_path)
+        
+        # 如果指定了列名，只选择这些列
+        if columns is not None:
+            if isinstance(columns, str):
+                # 单列名情况
+                if columns in df.columns:
+                    data = df[columns].values
+                    # 确保数据是二维的
+                    if data.ndim == 1:
+                        data = data.reshape(-1, 1)
+                else:
+                    raise ValueError(f"列名 '{columns}' 不存在于CSV文件中")
+            else:
+                # 多列名情况
+                valid_columns = [col for col in columns if col in df.columns]
+                if not valid_columns:
+                    raise ValueError(f"指定的列名均不存在于CSV文件中")
+                data = df[valid_columns].values
+        else:
+            # 如果没有指定列名，加载所有数值列
+            numeric_df = df.select_dtypes(include=['number'])
+            if numeric_df.empty:
+                raise ValueError(f"CSV文件中没有数值列")
+            data = numeric_df.values
+        
+        # 转置数据以匹配 [通道数, 时间步数] 的格式
+        data = data.T
+        
+        return data
+        
+    except Exception as e:
+        # 回退到基本的numpy加载方式
+        try:
+            data = np.loadtxt(file_path, delimiter=',', skiprows=1)
+            
+            # 如果数据只有一列，确保它是二维的
+            if data.ndim == 1:
+                data = data.reshape(-1, 1)
+                
+            # 转置数据以匹配 [通道数, 时间步数] 的格式
+            data = data.T
+            
+            return data
+        except Exception as nested_e:
+            raise ValueError(f"无法加载文件 {file_path}: {str(e)}\n尝试使用numpy加载时出错: {str(nested_e)}")

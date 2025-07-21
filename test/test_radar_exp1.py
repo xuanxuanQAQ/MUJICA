@@ -3,7 +3,6 @@ import numpy as np
 from scipy import signal
 import os
 import plot
-import radar.RangeFFT
 
 
 ADCSample = 256             # ADC采样点数，单个chirp的采样数量

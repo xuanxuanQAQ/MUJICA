@@ -226,6 +226,163 @@ def bpsk_demodulator_with_symbol_sync(fs, f, M, mSig):
     
     return nco_i, dmData, lpf1, phase, raloc
 
+def mpsk_demodulator_with_symbol_sync(fs, f, M_psk, M_mod, mSig):
+    """
+    M-PSK解调器函数，从M-PSK调制的正弦载波中解调数据。
+    
+    参数:
+    fs : float
+        采样频率 (Hz)
+    f : float
+        载波频率 (Hz)
+    M_psk : int
+        PSK调制阶数 (2, 4, 8, 16等)
+    M_mod : float
+        调制指数 M = fc/Rb （每个符号的载波周期数）
+    mSig : np.ndarray
+        M-PSK调制载波的离散波形数据数组
+        
+    返回:
+    nco_i : np.ndarray
+        同相分量波形数据数组
+    nco_q : np.ndarray
+        正交分量波形数据数组
+    dmData : np.ndarray
+        解调的符号数据数组
+    lpf1 : np.ndarray
+        I路低通滤波器输出
+    lpf2 : np.ndarray
+        Q路低通滤波器输出
+    phase : np.ndarray
+        相位数组
+    """
+    # ==
+    # 解调参数
+    # ==
+    ncoFrequency = f
+    ncoInitPhase = 0  # 初始相位
+    ncoStep = 1E-5  # 相位调整步长
+    lpfDepth = 20
+    
+    # 计算每个符号承载的比特数
+    bits_per_symbol = int(np.log2(M_psk))
+    
+    # ==
+    # 数据归一化
+    # ==
+    N = len(mSig)
+    T = 1 / f  # 载波周期：1 / 载波频率
+    Ts = 1 / fs  # 采样周期：1 / 采样频率
+    t = np.arange(0, N) / fs
+    
+    # ==
+    # Costas环路载波恢复和解调
+    # ==
+    # 初始化处理数组
+    nco_i = np.zeros(N)
+    nco_q = np.zeros(N)
+    mix1 = np.zeros(N)  # I路混频输出
+    mix2 = np.zeros(N)  # Q路混频输出
+    mix3 = np.zeros(N)  # 相位误差
+    lpf1 = np.zeros(N)  # I路滤波输出
+    lpf2 = np.zeros(N)  # Q路滤波输出
+    phase = np.zeros(N)
+    phase[0] = ncoInitPhase
+    
+    # 处理数据
+    for i in range(N):
+        # NCO相位反馈（适用于M-PSK的改进Costas环路）
+        if i > 0:
+            # M-PSK相位误差检测
+            if M_psk == 2:
+                # BPSK使用原来的方法
+                phase[i] = phase[i - 1] - (ncoStep * np.pi * np.sign(mix3[i - 1]))
+            else:
+                # M-PSK使用修正的相位误差检测
+                phase_error = np.arctan2(lpf2[i-1], lpf1[i-1])
+                # 对于M-PSK，需要将相位误差映射到合适的范围
+                phase_error_normalized = np.mod(phase_error * M_psk, 2*np.pi) / M_psk
+                if phase_error_normalized > np.pi:
+                    phase_error_normalized -= 2*np.pi
+                phase[i] = phase[i - 1] - ncoStep * phase_error_normalized
+        
+        # NCO生成本地载波
+        nco_i[i] = np.cos(2 * np.pi * ncoFrequency * t[i] + phase[i])
+        nco_q[i] = -np.sin(2 * np.pi * ncoFrequency * t[i] + phase[i])  # 注意符号
+        
+        # 输入混频器
+        mix1[i] = mSig[i] * nco_i[i]  # I路
+        mix2[i] = mSig[i] * nco_q[i]  # Q路
+        
+        # 低通滤波器（移动平均）
+        if i < lpfDepth:
+            lpf1[i] = np.sum(mix1[:i+1]) / (i+1)
+            lpf2[i] = np.sum(mix2[:i+1]) / (i+1)
+        else:
+            lpf1[i] = np.sum(mix1[i-lpfDepth+1:i+1]) / lpfDepth
+            lpf2[i] = np.sum(mix2[i-lpfDepth+1:i+1]) / lpfDepth
+        
+        # 相位误差计算（用于反馈）
+        mix3[i] = lpf1[i] * lpf2[i]
+    
+    # ==
+    # 符号解码
+    # ==
+    saPerCycl = T / Ts  # 每周期样本数
+    saPerSym = saPerCycl * M_mod  # 每符号样本数
+    BN = int(np.floor(N / saPerSym))  # 符号数量
+    dmData = np.zeros(BN, dtype=int)
+    
+    # ==
+    # 符号同步
+    # ==
+    # 计算包络变化来检测符号跳变
+    envelope = np.sqrt(lpf1**2 + lpf2**2)
+    aa = np.abs(np.diff(envelope))
+    
+    # 寻找峰值位置
+    if len(aa) > 0 and np.std(aa) > 0:
+        peakLoc1, _ = find_peaks(aa, prominence=np.sqrt(np.mean(aa**2)))
+        
+        if len(peakLoc1) > 0:
+            ra = np.mod(peakLoc1, int(saPerSym))
+            # 使用np.bincount找出最常见的值
+            if len(ra) > 0:
+                counts = np.bincount(ra.astype(int))
+                raloc = np.argmax(counts)
+            else:
+                raloc = int(saPerSym / 2)  # 默认值
+        else:
+            raloc = int(saPerSym / 2)  # 默认值
+    else:
+        raloc = int(saPerSym / 2)  # 默认值
+    
+    # ==
+    # M-PSK符号判决
+    # ==
+    # 生成M-PSK星座点
+    constellation_phases = np.arange(M_psk) * 2 * np.pi / M_psk
+    constellation_i = np.cos(constellation_phases)
+    constellation_q = np.sin(constellation_phases)
+    
+    for i in range(BN):
+        # 计算采样位置
+        sample_pos = int(i * saPerSym + raloc)
+        
+        if sample_pos >= N:
+            break
+            
+        # 获取I/Q采样值
+        I_sample = lpf1[sample_pos]
+        Q_sample = lpf2[sample_pos]
+        
+        # 计算到各个星座点的距离
+        distances = np.sqrt((I_sample - constellation_i)**2 + (Q_sample - constellation_q)**2)
+        
+        # 选择最近的星座点
+        dmData[i] = np.argmin(distances)
+    
+    return nco_i, nco_q, dmData, lpf1, lpf2, phase
 
 def Error110Func(rxData):
     """

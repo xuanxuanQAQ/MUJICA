@@ -1,6 +1,6 @@
 import numpy as np
 
-def ofdm_modulation(modulated_symbols, n_fft, n_cp, modulation_type=None, pilot_pattern='edge', comb_num=8):
+def ofdm_modulation(modulated_symbols, n_fft, n_cp, fs, modulation_type=None, pilot_pattern='edge', comb_num=8):
     """
     通用OFDM调制函数，支持不同的调制方式
     
@@ -122,4 +122,6 @@ def ofdm_modulation(modulated_symbols, n_fft, n_cp, modulation_type=None, pilot_
     # 将所有OFDM符号串联成一个序列
     ofdm_signal = ofdm_time_symbols_cp.flatten()
     
-    return ofdm_signal, frame_structure
+    time_indices = np.arange(0, len(ofdm_signal)) / fs  # 生成时间索引
+    
+    return ofdm_signal, frame_structure, time_indices

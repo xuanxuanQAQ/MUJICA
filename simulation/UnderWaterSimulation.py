@@ -4,7 +4,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from .DataGenerator import generate_random_binary
 from .ChannelSimulation import alpha_dist_noise, gaussian_noise
-from .OceanWaveSimulation import PM, generate_time_series
+from .Ocean2DWaveSimulation import PM, generate_time_series
 
 import modulation
 import numpy as np

@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import simulation
 import modulation
 import plot
@@ -16,8 +20,8 @@ m_psk = 4                   # M-PSK的M
 
 # 模拟相关参数
 sample_rate = 100           # 采样率
-snr_db = 50                 # 噪声信噪比(dB)
-wind_speed = 1              # 风速(m/s)
+snr_db = 100                 # 噪声信噪比(dB)
+wind_speed = 6              # 风速(m/s)
 fetch_length = 1e6          # 风区长度(m)
 
 # 雷达设置相关参数

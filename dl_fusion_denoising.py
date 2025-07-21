@@ -7,7 +7,7 @@ import utils
 # multiprocessing.freeze_support()
 
 config = 'predict' # 'train' or 'predict'
-method = 'conv' # 'conv' or 'transformer' or 'GRU'
+method = 'conv' # 'conv' or 'GRU'
 
 save_dir = "model/fusion_denoising"
 channel_est_pt = 'model/fusion_denoising/best_model.pth'
@@ -17,28 +17,6 @@ if method == 'conv':
         hidden_dim=64, 
         n_fft=256, 
         hop_length=64
-    )
-elif method == 'transformer':
-    model = dl.TimeFrequencyTransformerNet(
-        hidden_dim=64,
-        n_fft=256,
-        hop_length=64,
-        in_channels=4,
-        num_encoder_layers=3,
-        num_decoder_layers=3,
-        nhead=4,
-        dropout=0.1
-    )
-elif method == 'GRU':
-    model = dl.TimeFrequencyBiGRUNet(
-        hidden_dim=32, 
-        n_fft=256, 
-        hop_length=64, 
-        in_channels=4,
-        num_gru_layers=1, 
-        dropout=0.1,
-        window_size=512, 
-        window_stride=256
     )
 
 if config == "train":
@@ -53,29 +31,9 @@ if config == "train":
 
         dl.train_fusion_denoising(model, data, epochs=300, learning_rate=0.002, save_dir=save_dir)
         
-    elif method == 'transformer':      
-        # Load the data
-        data = dl.load_fusion_denoising_exp_data(
-                input_dir='data/bpsk_exp_input',
-                label_dir='data/bpsk_exp_label',
-                batch_size=1
-            )
-
-        dl.train_fusion_denoising_transformer(model, data, epochs=200, learning_rate=0.002, save_dir=save_dir)
-        
-    elif method == 'GRU':
-        # Load the data
-        data = dl.load_fusion_denoising_exp_data(
-                input_dir='data/bpsk_exp_input',
-                label_dir='data/bpsk_exp_label',
-                batch_size=4
-            )
-
-        dl.train_fusion_denoising_bigru(model, data, epochs=200, learning_rate=0.002, save_dir=save_dir)
-    
 elif config =="predict":
     
-    file_name = 'BPSKRb100A110Fc200P70F1_S3_Raw_0.bin'
+    file_name = 'BPSKRb100A110Fc200P70F1_Sbig2_Raw_0.bin'
     processed_phase, fs, fc, modulationIndex = radar.extract_processed_radar_phase(file_name)
     
     rxDatas = []

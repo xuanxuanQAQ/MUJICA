@@ -3,6 +3,10 @@ matplotlib.use('TkAgg',force=True)
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
+from matplotlib import cm
+from mpl_toolkits.mplot3d import Axes3D
+import time
+from matplotlib.animation import FuncAnimation
 
 def plot_signals_with_noise(clean_signal, noisy_signals, t, alpha_values, 
                             save_path='alpha_stable_noise.png', show=True):
@@ -148,3 +152,128 @@ def plot_microamplitude_wave(t, recieved_signal, U, save_path=None):
     
     plt.show(block=False)
     
+    
+def plot_PM3D_ocean_wave_animation(htt, wind_speed, patch_size, mesh_size, deta_x):
+    """
+    Plot 3D ocean wave data using proper animation
+    """    
+    # Constants and grid setup
+    g = 9.81  # Gravitational constant
+    length = wind_speed * wind_speed * 0.9128  # Domain wave length
+    
+    # Find number of time steps
+    num_time_steps = htt.shape[2]  # 使用所有帧
+    
+    # Create the grid
+    cn = htt.shape[1]
+    x = np.arange(-cn/2, cn/2) * deta_x
+    y = np.arange(-cn/2, cn/2) * deta_x
+    X, Y = np.meshgrid(x, y)
+    
+    # Find global min and max
+    v_max = np.max(htt)
+    v_min = np.min(htt)
+    
+    # Create figure
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Initial surface
+    surf = ax.plot_surface(X, Y, htt[:, :, 0], cmap=cm.coolwarm,
+                          linewidth=0, antialiased=False)
+    
+    # Set axes properties once
+    ax.set_zlim(v_min, v_max)
+    ax.set_xlabel('x (m)')
+    ax.set_ylabel('y (m)')
+    ax.set_zlabel('H (m)')
+    
+    # Add colorbar
+    fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
+    title = ax.set_title(f"PM3D_ocean_wave Num: 1")
+    
+    # Update function for animation - 修复这里
+    def update_plot(frame):
+        # 清除所有现有的3D对象 - 修改这里
+        for collection in ax.collections:
+            collection.remove()
+        
+        # Plot new surface
+        surf = ax.plot_surface(X, Y, htt[:, :, frame], cmap=cm.coolwarm,
+                               linewidth=0, antialiased=False)
+        
+        title.set_text(f"PM3D_ocean_wave Num: {frame+1}")
+        return surf, title
+    
+    # Create animation
+    anim = FuncAnimation(fig, update_plot, frames=num_time_steps,
+                         interval=50, blit=False)
+    
+    # Show plot
+    plt.tight_layout()
+    plt.show()
+    
+    return anim 
+    
+def plot_ocean_surface_radar_backscattering(ele_recieved, time_series):
+    # 绘图
+    plt.figure(figsize=(10, 6))
+    plt.plot(time_series, 20 * np.log10(np.abs(ele_recieved)), linewidth=2)
+    plt.xlabel('Time (s)')
+    plt.ylabel('Backscattering power (dB)')
+    plt.title('Backscattering Power vs Time')
+    plt.grid(True)
+    plt.show(block=False)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(time_series, 20 * np.log10(np.abs(np.real(ele_recieved))), 'k', label='Real Part')
+    plt.plot(time_series, 20 * np.log10(np.abs(np.imag(ele_recieved))), '--', label='Imaginary Part')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Amplitude (dB)')
+    plt.title('Real and Imaginary Parts')
+    plt.legend()
+    plt.grid(True)
+    plt.show(block=False)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(time_series, np.unwrap(np.angle(ele_recieved)), 'k')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Phase (rad)')
+    plt.title('Unwrapped Phase')
+    plt.grid(True)
+    plt.show(block=False)
+    
+def plot_unwrapped_phase(times, phase_data):
+    """
+    绘制相位数据
+    
+    参数:
+    times : array-like
+        时间数据
+    phase_data : array-like
+        相位数据
+    """
+    plt.figure()
+    plt.plot(times, phase_data, 'b-', linewidth=1)
+    plt.xlabel('Time (ms)')
+    plt.ylabel('Phase (radians)')
+    plt.title('Phase Analysis')
+    plt.grid(True, alpha=0.3)
+    plt.show(block=False)
+    
+
+def plot_unwrapped_phase_1d(phase_data):
+    """
+    绘制相位数据
+    
+    参数:
+    phase_data : array-like
+        相位数据
+    """
+    plt.figure()
+    plt.plot(phase_data, 'b-', linewidth=1)
+    plt.xlabel('Sample Index')
+    plt.ylabel('Phase (radians)')
+    plt.title('Phase Analysis')
+    plt.grid(True, alpha=0.3)
+    plt.show()
